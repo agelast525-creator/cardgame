@@ -30,7 +30,7 @@ io.on('connection',socket=>{
  const result=handler(data);if(typeof ack==='function')ack({ok:true,...(result||{})});
  }catch(error){const message=error instanceof Error?error.message:'操作失败';socket.emit('game_error',message);if(typeof ack==='function')ack({ok:false,error:message});}});
  }
- function nickname(data:any){if(typeof data.nickname!=='string'||!data.nickname.trim())throw new Error('请输入昵称');return data.nickname.trim().slice(0,20);}
+ function nickname(data:any){if(typeof data.nickname!=='string'||!data.nickname.trim())throw new Error('请输入昵称');const name=data.nickname.trim();if(name.length>20)throw new Error('昵称最多20个字符');return name;}
  function member(data:any,action=false){const m=socket.data.member;const g=rooms.get(data.roomId);
  if(!m||m.roomId!==data.roomId||!g||active.get(m.playerId)!==socket.id)throw new Error('请先加入房间');
  if(action){if(g.phase==='GAME_OVER'||g.phase==='WAITING_FOR_PLAYERS')throw new Error('当前不能操作');if(Object.values(g.players).some(p=>!p.connected))throw new Error('对方断线，等待重连');if(data.revision!==revisions.get(g.roomId))throw new Error('牌局已更新，请重新操作');}
@@ -38,7 +38,7 @@ io.on('connection',socket=>{
  }
  register('create_room',data=>{
  if(socket.data.member)throw new Error('你已在房间中');
- const name=nickname(data);let rid:string;do{rid=randomBytes(4).toString('hex').toUpperCase();}while(rooms.has(rid));
+ const name=data.nickname===undefined?'player1':nickname(data);let rid:string;do{rid=randomBytes(4).toString('hex').toUpperCase();}while(rooms.has(rid));
  const pid=randomUUID(),token=randomBytes(32).toString('hex');
  const p:Player={id:pid,nickname:name,connected:true,hand:[]};
  const g:GameState={roomId:rid,players:{[pid]:p},drawPile:[],discardPile:[],tableCards:[],trumpSuit:'spade',trumpIndicatorCard:{id:'',type:'joker',name:'枪毙'},leaderId:'',followerId:'',phase:'WAITING_FOR_PLAYERS'};
@@ -47,7 +47,7 @@ io.on('connection',socket=>{
  });
  register('join_room',data=>{
  if(socket.data.member)throw new Error('你已在房间中，请在第二个页面加入');
- const name=nickname(data),rid=String(data.roomId||'').trim().toUpperCase(),g=rooms.get(rid);
+ const name=data.nickname===undefined?'player2':nickname(data),rid=String(data.roomId||'').trim().toUpperCase(),g=rooms.get(rid);
  if(!g)throw new Error('房间不存在，服务器重启后需重新创建');
  if(g.phase==='GAME_OVER')throw new Error('该局已结束');
  if(Object.keys(g.players).length>=2)throw new Error('房间已满');
@@ -63,6 +63,12 @@ io.on('connection',socket=>{
  attach(m.roomId,m.playerId);changed(rooms.get(m.roomId)!,'玩家已恢复连接');
  });
  register('request_game_state',data=>{const {g,p}=member(data);socket.emit('game_state_updated',publicState(g,p.id));});
+ register('update_nickname',data=>{
+ const {g,p}=member(data);
+ p.nickname=nickname(data);
+ // Profile edits do not change the game revision or invalidate an in-flight move.
+ emit(g);
+ });
  register('play_card',data=>{
  const {g,p}=member(data,true);const leader=p.id===g.leaderId;
  if((leader&&g.phase!=='LEADER_PLAYING')||(!leader&&g.phase!=='FOLLOWER_RESPONDING'))throw new Error('还没轮到你');

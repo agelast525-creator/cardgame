@@ -11,13 +11,25 @@ const request=(s,event,data={})=>new Promise((resolve,reject)=>s.timeout(2000).e
 try{
  await new Promise((resolve,reject)=>{server.stdout.once('data',resolve);server.once('exit',()=>reject(Error('server failed')));});
  const a=await connect(),b=await connect(),outsider=await connect();
- const created=await request(a,'create_room',{nickname:'A'});assert.ok(created.ok);
+ const created=await request(a,'create_room',{});assert.ok(created.ok);
  const rid=created.roomId;
- assert.equal((await request(a,'create_room',{nickname:'A'})).ok,false);
+ assert.equal((await request(a,'create_room',{})).ok,false);
  assert.equal((await request(a,'join_room',{roomId:rid,nickname:'A'})).ok,false);
- assert.equal((await request(b,'join_room',{roomId:rid,nickname:'B'})).ok,true);
+ assert.equal((await request(b,'join_room',{roomId:rid})).ok,true);
  await until(()=>views.get(a)?.phase==='LEADER_PLAYING');
  let g=views.get(a);const aId=g.viewerId;
+ assert.equal(g.players[aId].nickname,'player1');
+ assert.equal(Object.values(g.players).find(p=>p.id!==aId).nickname,'player2');
+ const rev=g.revision;
+ assert.equal((await request(a,'update_nickname',{roomId:rid,nickname:'  红桃玩家  ',playerId:g.followerId})).ok,true);
+ await until(()=>views.get(b).players[aId].nickname==='红桃玩家');
+ assert.equal(views.get(b).revision,rev);
+ assert.equal(Object.values(views.get(b).players).find(p=>p.id!==aId).nickname,'player2');
+ for(const nickname of ['', '   ', 'x'.repeat(21), null]){
+ assert.equal((await request(a,'update_nickname',{roomId:rid,nickname})).ok,false);
+ }
+ assert.equal((await request(outsider,'update_nickname',{roomId:rid,nickname:'伪造'})).ok,false);
+ assert.equal((await request(a,'update_nickname',{roomId:'other-room',nickname:'伪造'})).ok,false);
  assert.equal(g.players[aId].hand.length,8);assert.equal(g.drawPileCount,38);
  assert.equal(g.drawPile,undefined);assert.equal(g.discardPile,undefined);
  assert.equal(Object.values(g.players).find(p=>p.id!==aId).hand,undefined);
@@ -32,6 +44,7 @@ try{
  assert.equal((await request(resumed,'reconnect_game',{roomId:rid,token:created.token})).ok,true);
  await until(()=>views.get(resumed)?.viewerId===aId);
  assert.equal(views.get(resumed).players[aId].hand.length,8);
+ assert.equal(views.get(resumed).players[aId].nickname,'红桃玩家');
  const playing=[resumed,b];
  for(let n=0;n<500;n++){
  g=views.get(resumed);if(g.phase==='GAME_OVER')break;
@@ -51,5 +64,5 @@ try{
  if(n===0)assert.equal((await request(actor,event,{roomId:rid,revision:g.revision,cardId:legal[0]?.id})).ok,false);
  }
  assert.equal(views.get(resumed).phase,'GAME_OVER');
- console.log('PASS: identity, private state, unauthorized actions, replay rejection, disconnect pause, token reconnect, full game, 54-card conservation');
+ console.log('PASS: default names, rename synchronization, invalid names, ownership, rename survives reconnect, identity, private state, unauthorized actions, replay rejection, disconnect pause, token reconnect, full game, 54-card conservation');
 }finally{clients.forEach(s=>s.disconnect());server.kill();}

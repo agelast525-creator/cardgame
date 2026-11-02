@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: cardgame
+    runtime: node
+    plan: free
+    branch: main
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health

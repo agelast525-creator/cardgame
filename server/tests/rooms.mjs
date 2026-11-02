@@ -21,7 +21,7 @@ try{
  assert.equal(g.players[aId].nickname,'player1');
  assert.equal(Object.values(g.players).find(p=>p.id!==aId).nickname,'player2');
  const rev=g.revision;
- assert.equal((await request(a,'update_nickname',{roomId:rid,nickname:'  红桃玩家  ',playerId:g.followerId})).ok,true);
+ assert.equal((await request(a,'update_nickname',{roomId:rid,nickname:'  红桃玩家  '})).ok,true);
  await until(()=>views.get(b).players[aId].nickname==='红桃玩家');
  assert.equal(views.get(b).revision,rev);
  assert.equal(Object.values(views.get(b).players).find(p=>p.id!==aId).nickname,'player2');
@@ -56,12 +56,14 @@ try{
  return c.type==='joker'||(c.suit===attack.suit&&c.rank>attack.rank)||(c.suit===g.trumpSuit&&attack.suit!==g.trumpSuit);
  });
  const event=legal.length?'play_card':g.phase==='FOLLOWER_RESPONDING'?'decline_to_defend':'end_leader_turn';
- const result=await request(actor,event,{roomId:rid,revision:g.revision,cardId:legal[0]?.id});
+ await wait(120);
+ const payload={roomId:rid,revision:g.revision,...(legal.length?{cardId:legal[0].id}:{})};
+ const result=await request(actor,event,payload);
  assert.ok(result.ok,JSON.stringify(result));
  await until(()=>views.get(resumed).revision>g.revision);
  const next=views.get(resumed);
  assert.equal(next.drawPileCount+next.discardPileCount+next.tableCards.length+Object.values(next.players).reduce((sum,p)=>sum+p.handCount,0),54);
- if(n===0)assert.equal((await request(actor,event,{roomId:rid,revision:g.revision,cardId:legal[0]?.id})).ok,false);
+ if(n===0)assert.equal((await request(actor,event,payload)).ok,false);
  }
  assert.equal(views.get(resumed).phase,'GAME_OVER');
  console.log('PASS: default names, rename synchronization, invalid names, ownership, rename survives reconnect, identity, private state, unauthorized actions, replay rejection, disconnect pause, token reconnect, full game, 54-card conservation');

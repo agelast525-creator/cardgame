@@ -25,6 +25,11 @@ function App(){
  const disconnect=()=>{setConnected(false);setBusy(false);};
  const error=(s:string)=>setMessage(s);
  socket.on('connect',connect).on('disconnect',disconnect).on('connect_error',()=>setMessage('连接失败，正在重试，请确认终端中的服务仍在运行')).on('game_state_updated',update).on('game_error',error);
+ socket.on('room_expired',(text:string)=>{
+ const rid=new URLSearchParams(location.search).get('room')||initialRoom;
+ (guest?sessionStorage:localStorage).removeItem(storageKey(rid));
+ setState(undefined);setBusy(false);setEditing(false);setMessage(text);
+ });
  socket.connect();
  return()=>{socket.removeAllListeners();socket.disconnect();};
  },[]);
